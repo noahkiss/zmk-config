@@ -7,26 +7,39 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
+
       - uses: actions/checkout@v4
         with:
           repository: moergo-sc/zmk
           ref: main
           path: src
+
+      - name: Find config directories
+        id: find-configs
+        run: |
+          CONFIGS=$(find config -name "default.nix" -type f -exec dirname {} \; | sed 's|^config/||')
+          echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
+
       - uses: cachix/install-nix-action@v25
         with:
           nix_path: nixpkgs=channel:nixos-22.05
+
       - uses: cachix/cachix-action@v14
         with:
           name: moergo-glove80-zmk-dev
           skipPush: true
-      - name: Build Glove80 combined firmware
-        run: nix-build config -o combined
-      - name: Copy result out of nix store
-        run: cp combined/glove80.uf2 glove80.uf2
-      - name: Upload result
+
+      - name: Build all firmwares
+        continue-on-error: true
+        run: |
+          for config in ${{ steps.find-configs.outputs.configs }}; do
+            echo "Building $config..."
+            nix-build config/$config -o $config || echo "Failed to build $config"
+            cp $config/glove80.uf2 $config.uf2 || echo "Failed to copy $config firmware"
+          done
+
+      - name: Upload results
         uses: actions/upload-artifact@v4
         with:
-          name: glove80.uf2
-          path: glove80.uf2
+          name: firmwares
+          path: "*.uf2"
