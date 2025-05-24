@@ -17,8 +17,7 @@ jobs:
       - name: Find config directories
         id: find-configs
         run: |
-          CONFIGS=$(find config -name "default.nix" -type f -exec dirname {} \; | sed 's|^config/||')
-          echo "configs=$CONFIGS" >> $GITHUB_OUTPUT
+          find config -name "default.nix" -type f -exec dirname {} \; | sed 's|^config/||' > configs.txt
 
       - uses: cachix/install-nix-action@v25
         with:
@@ -32,11 +31,11 @@ jobs:
       - name: Build all firmwares
         continue-on-error: true
         run: |
-          for config in ${{ steps.find-configs.outputs.configs }}; do
+          while IFS= read -r config; do
             echo "Building $config..."
             nix-build config/$config -o $config || echo "Failed to build $config"
             cp $config/glove80.uf2 $config.uf2 || echo "Failed to copy $config firmware"
-          done
+          done < configs.txt
 
       - name: Upload results
         uses: actions/upload-artifact@v4
